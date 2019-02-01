@@ -89,7 +89,7 @@ version of software.
 
 ## Current Simulation framework:
 
-![](diagram.png)
+![](GitImages\diagram.png)
 
 ## Outcomes
 
