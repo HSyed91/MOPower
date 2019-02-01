@@ -61,8 +61,8 @@ future multi-omics data integration methods.
 # Citation:
 
 If you find MOPower useful, the best way to show your appreciation is
-through citing. Click the badge to generate
-a DOI that can be put into most citation managers. [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2554818.svg)](https://doi.org/10.5281/zenodo.2554818)
+through citing. Click the badge to generate a DOI that can be put into most citation managers. 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2554818.svg)](https://doi.org/10.5281/zenodo.2554818)
 A manuscript for MOPower is currently in production.
 
 # Purpose:
