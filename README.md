@@ -97,11 +97,11 @@ version of software.
 
   - Linear predictor model for binomial distribution simulation.
 
-![](img1.png) ![](img2.png)
+![](GitImages/img1.png) ![](GitImages/img2.png)
 
-![](img3.png) ![](img4.png)
+![](GitImages/img3.png) ![](GitImages/img4.png)
 
-![](img5.png)
+![](GitImages/img5.png)
 
 ### Time-to-event
 
@@ -111,7 +111,7 @@ time to myocardial infarction, time to an epileptic seizure. Survival
 time for each patient is calculated with a Weibull distribution with
 proportional hazards.
 
-![](img6.png)
+![](GitImages/img6.png)
 
 The baseline hazard is user-specified and controls the dispersion of the
 simulated times. Censoring time for each individual is also calculated
@@ -122,7 +122,7 @@ study time (S) or censoring time (C), whichever occurs first and the
 censoring indicator is subsequently calculated for right censored data
 as:
 
-![](img7.png)
+![](GitImages/img7.png)
 
 ### Longitudinal
 
@@ -140,7 +140,7 @@ SNP data is simulated with a random Binomial distribution where the user
 specifies the mean minor allele frequency (MAF). An additive model is
 assumed. The MAF determines the effect size of each SNP.
 
-![](img8.png)
+![](GitImages/img8.png)
 
 ### Rare variant data:
 
@@ -153,7 +153,7 @@ sets, burden or dispersion.
 Random Binomial distribution. User specifies the proportion of patients
 on the test treatment.
 
-![](img9.png)
+![](GitImages/img9.png)
 
 ### RNA-Seq gene expression data
 
@@ -167,7 +167,7 @@ natural choice over the Poisson distribution as it provides a better fit
 for RNA-Seq data by allowing an over-dispersion parameter to capture
 extra variability over the mean.
 
-![](img10.png)
+![](GitImages/img10.png)
 
 The simulation of RNA-Seq data is similar to that of Yu et al. (2017).
 This paper reviews all previous simulation and power calculation tools.
@@ -186,7 +186,7 @@ and effect size (methylation difference/odds ratio).
 A methylation odds ratio is calculated for the user to know the
 difference between groups of individuals. \(MM=\) mean methylation.
 
-![](img11.png)
+![](GitImages/img11.png)
 
 The simulation framework for DNA methylation is based on the work done
 by Pei-Chien Tsai et al. (2015). This work was carried out with the
@@ -248,7 +248,7 @@ analysis as censored and event patients.
 The LRT is used to compare two statistical models (i.e. the null and
 alternative), given by:
 
-![](img12.png)
+![](GitImages/img12.png)
 
 The \(p\)-value is derived using the difference between model
 log-likelihoods. The probability distribution of the test statistic is
@@ -263,7 +263,7 @@ variables in a model or comparing two models exist, such as the Wald
 test and likelihood ratio test (LRT). The Wald test statistic is given
 by:
 
-![](img13.png)
+![](GitImages/img13.png)
 
 I(theta) is the expected Fisher information matrix. theta\_{Null} is the
 proposed values (null model). The assumption is that the difference
@@ -317,7 +317,7 @@ software.
 
 **Front end with reactive datatable**
 
-<img src="1.png" width="600px" />
+<img src="GitImages/1.png" width="600px" />
 
 # Future development pipeline
 
