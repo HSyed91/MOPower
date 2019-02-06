@@ -32,6 +32,9 @@ library(BiocVersion)
 # Define UI for application
 shinyUI(fluidPage(
   # Application title
+   titlePanel(tags$head(tags$link(rel = "icon", type = "image/png", href = "MOPowerlogo4.png"),
+                       tags$title("MOPower"))
+  ),
   navbarPage(theme = shinythemes::shinytheme("spacelab"),  title=div(img(src="MOPowerlogo4.png", height = 50), "MOPower"),
   tabPanel("PC", h2("Multi-Omics Power Calculator & Data simulator"), 
   fluidRow(
