@@ -71,7 +71,7 @@ shinyServer(function(input, output, session) {
   dt <- cbind(dt,snpdt)
   }
   # Outcome (case-control)
-  if(input$outselect == 1){
+  if(1 %in% input$outselect){
     if("Genome" %in% input$omics){
   b0 <- log(input$ccratio/(1-input$ccratio)) -  sum1 - (Treatment*input$treat)
   linpred <- b0 + sum1 + (Treatment*input$treat)
