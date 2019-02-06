@@ -204,7 +204,7 @@ shinyUI(fluidPage(
                                             can calculate power under different scenarios, changing the MAF interval for the SNPs, 
                                             adding unmethylated CpG sites and testing multiple integration methods, however for the purpose of this example we will just show 
                                             one power calculation using the Cox Path model with L1 Penalty.")),
-               mainPanel(img(src="1.png",height = 800),img(src="4.png", height = 400),img(src="5.png", height = 800))))),
+               mainPanel(img(src="GitImages/1.png",height = 800),img(src="GitImages/4.png", height = 400),img(src="GitImages/5.png", height = 800))))),
       tabPanel("About", 
                fluidRow(
                  column(8,wellPanel(h3("MOPower v1.01 (Beta), GNU General Public Licence"),"MOPower is a multi-omics power calculator, implemented with the latest integration and analysis models. Data is simulated using statistical distribution and user input parameters. Power is calculated based on the number of replicates
