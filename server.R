@@ -25,12 +25,12 @@ library(iClusterPlus)
 library(iCluster)
 library(BiocInstaller)
 library(BiocVersion)
-library(MOFAtools)
+library(MOFA)
 
 # v This section is for shinyapps.io v
+#use_python("/usr/bin/python3.5")
 #virtualenv_create("r-reticulate")
 #use_virtualenv("r-reticulate")
-#use_python("/usr/bin/python3.5")
 #py_install("mofapy")
 
 # Define server logic
@@ -225,9 +225,11 @@ shinyServer(function(input, output, session) {
       allsnp <- dt[ , grepl( "SNP" , names( dt ) ) ]
       snpset <- apply(allsnp, 1, sum)
       }
-        
+        else{
+          dt <- data.frame(Patients,Treatment,EndofStudy)
+        }
       # Outcome (case-control)
-      if(input$outselect == 1){
+      if(1 %in% input$outselect){
         if("Genome" %in% input$omics){
         b0 <- log(input$ccratio/(1-input$ccratio)) -  sum1 - (Treatment*input$treat)
         linpred <- b0 + sum1 + (Treatment*input$treat)
@@ -756,9 +758,9 @@ pdf[h,] <- p
    if ('Genome' %in% x) 
     choices = c(choices,list("SNP-set" = 1))
     if("RNA-seq" %in% x) 
-      choices =c(choices, list("GE" = 2))
+      choices =c(choices, list("Gene Expression" = 2))
     if("Epigenome" %in% x) 
-      choices = c(choices,list("Meth" = 3))
+      choices = c(choices,list("Methylation" = 3))
     if(input$tratio > 0) 
       choices = c(choices,c("Treatment" = 4))
     
@@ -797,7 +799,7 @@ pdf[h,] <- p
      }
     })
    
-  output$summary <- renderPrint({methods()})
+   output$summary <- renderPrint({methods()})
   output$meanmeth <- renderText({paste0("Cases mean methylation ", round(mean(rbeta(input$obs,input$casemeth,input$casemeth2)),3),"\nControls mean methylation ", round(mean(rbeta(input$obs,input$contmeth,input$contmeth2)),3))
   })
  # output$powercalc <- renderText({ 
