@@ -2,7 +2,7 @@
 # User Interface
 # You can run the application by clicking 'Run App' above.
 
-#library(CancerSubtypes)
+library(CancerSubtypes)
 library(extRemes)
 library(ggplot2)
 library(glmpath)
@@ -16,14 +16,15 @@ library(reshape2)
 library(shiny)
 library(shinyBS)
 library(shinythemes)
+library(shinydashboard)
 library(SNFtool)
-#library(MOFAtools)
+library(MOFA)
 library(survival)
 library(reticulate)
 library(RColorBrewer)
 library(ConsensusClusterPlus)
 library(iClusterPlus)
-#library(iCluster)
+library(iCluster)
 library(BiocInstaller)
 library(BiocVersion)
 
@@ -32,10 +33,11 @@ library(BiocVersion)
 # Define UI for application
 shinyUI(fluidPage(
   # Application title
-   titlePanel(tags$head(tags$link(rel = "icon", type = "image/png", href = "MOPowerlogo4.png"),
+  titlePanel(tags$head(tags$link(rel = "icon", type = "image/png", href = "MOPowerlogo4.png"),
                        tags$title("MOPower"))
   ),
   navbarPage(theme = shinythemes::shinytheme("spacelab"),  title=div(img(src="MOPowerlogo4.png", height = 50), "MOPower"),
+
   tabPanel("PC", h2("Multi-Omics Power Calculator & Data simulator"), 
   fluidRow(
      column(8,wellPanel(
@@ -53,11 +55,11 @@ shinyUI(fluidPage(
                                                                                               #,"Proteome","Metabolome"
                                                                                               ),inline=TRUE),
                bsTooltip("omics", "Genomic data - SNPs, Rare variants & CNVs. \\ RNA-Seq data - Gene expression (Read counts). \\ Epigenome data - DNA methylation (array). \\ Proteomic data - Protein counts.","right", options = list(container = "body")),
-             # Selecting outcome
-               checkboxGroupInput(inputId = "outselect", label ="Outcome/Phenotype selection", choices = list("Case-Control (Binary)"= 1, "Longitudinal"= 2, "Time-to-event (Survival)"= 3),inline=TRUE),
-               bsTooltip("outselect", "You can choose a single outcome or select joint outcomes. Only 'Case-Control' + 'Longitudinal' or 'Longitudinal' + 'Survival'","bottom", options = list(container = "body"))
+            # Selecting outcome
+            checkboxGroupInput(inputId = "outselect", label ="Outcome/Phenotype selection", choices = list("Case-Control (Binary)"= 1, "Longitudinal"= 2, "Time-to-event (Survival)"= 3),inline=TRUE),
+            bsTooltip("outselect", "You can choose a single outcome or select joint outcomes. Only Case-Control + Longitudinal or Longitudinal + Survival","right", options = list(container = "body"))
             
-               ))
+            ))
      ),
   # Conditional reactive panels
   fluidRow(
@@ -238,7 +240,7 @@ shinyUI(fluidPage(
 
 "11. Huang, S., Chaudhary, K., & Garmire, L. X. (2017). More Is Better: Recent Progress in Multi-Omics Data Integration Methods. Front Genet, 8, 84. doi:10.3389/fgene.2017.00084",br(),
 
-"12. Rohart, F., Gautier, B., Singh, A., & Lê Cao, K. A. (2017). mixOmics: An R package for 'omics feature selection and multiple data integration. PLoS Comput Biol, 13(11), e1005752. doi:10.1371/journal.pcbi.1005752 ",br(),
+"12. Rohart, F., Gautier, B., Singh, A., & LÃª Cao, K. A. (2017). mixOmics: An R package for 'omics feature selection and multiple data integration. PLoS Comput Biol, 13(11), e1005752. doi:10.1371/journal.pcbi.1005752 ",br(),
 
 "13. Sun, Y. V., & Hu, Y. J. (2016). Integrative Analysis of Multi-omics Data for Discovery and Functional Studies of Complex Human Diseases. Adv Genet, 93, 147-190. doi:10.1016/bs.adgen.2015.11.004",br(),
 
