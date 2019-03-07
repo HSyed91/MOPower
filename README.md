@@ -5,7 +5,7 @@ Created and Developed by: Hamzah Syed
 
 <!--html_preserve-->
 
-<img src="MOPowerlogo4.png" alt="logo" width="100" style="position:absolute; top:0; right:0; padding:10px;"/><!--/html_preserve--> ![](GitImages/gosgene.png)
+<img src="MOPowerlogo4.png" alt="logo" width="100" style="position:absolute; top:0; right:0; padding:10px;"/><!--/html_preserve--> ![](GitImages/gosgene.png=10x)
 
 **Co-Developers:** Georg Otto, Dan Kelberman, Chiara Bacchelli and Phil
 Beales. Institution: GOSgene, Genetics and Genomic Medicine, UCL GOS
