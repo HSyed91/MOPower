@@ -64,6 +64,17 @@ If you find MOPower useful, the best way to show your appreciation is
 through citing. Click the DOI badge and under the 'Cite as' heading there will be a citation manager. A manuscript for MOPower is currently in production.  
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2554818.svg)](https://doi.org/10.5281/zenodo.2554818)
 
+# Updates & Bug Fixes
+## 10/04/2019 v1.0.2
+1. Single omics power calculation of RNA-Seq data can now be calculated using edgeR's Exact test or Negative Binomial GLM. The output is now the power to detect differentially expressed genes between groups given a sample of genes (Q: How many genes will be differentially expressed?) Number of simulations input will disappear as this is not required.
+2. Plot of estimated dispersion parameter is displayed for single omics RNA-Seq power calculation. 
+3. An 'Add line' checkbox to add a new power calculation line to the power plot has been added.
+4. Data replicate displayed in UI will now only show one feature from each omics. Download sample data will have the entire simulated dataset. This was too minimize the space taken by the display data.
+5. Longitudinal outcome removed from simulation framework because there are no multi-omics analyses currently available to analyse the outcome.
+6. Analysis options shown in menu are dependent on the outcome choice.
+7. Dispersion parameter within the Negative-Binomial model used to simulate gene expression data is now defined using the edgeR definition of 1/(D^2).
+      
+
 # Purpose:
 
 The purpose of MOPower is to simulate multi-omics data and calculate
@@ -228,6 +239,8 @@ analysis as censored and event patients.
 9.  Multi Co-inertia analysis. (Significance of correlation between
     omics features.)
     <http://bioconductor.org/packages/release/bioc/html/omicade4.html>
+10. Negative Binomial GLM and Exact test.
+    <https://bioconductor.org/packages/release/bioc/html/edgeR.html>
 
 # Output
 
