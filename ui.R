@@ -1,4 +1,4 @@
-# MOPower v1.0.1
+# MOPower v1.0.2
 # User Interface
 # You can run the application by clicking 'Run App' above.
 
@@ -40,24 +40,22 @@ shinyUI(fluidPage(
 
   tabPanel("PC", h2("Multi-Omics Power Calculator & Data simulator"), 
   fluidRow(
-     column(8,wellPanel(
-               helpText("This power calculator is used for the design of multi-omic studies. Simulation of genomic, transcriptomic and epigenomic data with case-control or time-to-event outcomes. Power calculation is based on the power to detect a locus association incorporating multi-omic festures with the outcome of interest. Single omics power and sample size calculation can also be undertaken using MOPower."),
-            # Input: Select a file ----
-            # fileInput("fileup", "Choose data file to fill in parameter values", multiple = TRUE, accept = c("text/csv/vcf/gen","text/comma-separated-values,text/plain",
-                            #        ".csv",".vcf",".gen")),
-            # Horizontal line ----
-            # tags$hr(),
-            # bsTooltip("fileup", "Upload pilot/real data to estimate parameter values for simulation of realistic data","bottom", options = list(container = "body")),
-               
+     column(12,wellPanel(
+               helpText("This power calculator is used for the design of multi-omic studies. 
+                        Simulation of genomic, transcriptomic and epigenomic data with case-control 
+                        or time-to-event outcomes. Power calculation is based on the power to detect 
+                        a locus association incorporating multi-omic festures with the outcome of interest. 
+                        Single omics power and sample size calculation can also be undertaken using MOPower."),
+             
                h4("Select and fill in parameter values"),
              # Selecting omics
                checkboxGroupInput(inputId = "omics", label ="Omics selection", choices = list("Genome", "RNA-seq", "Epigenome"
                                                                                               #,"Proteome","Metabolome"
                                                                                               ),inline=TRUE),
-               bsTooltip("omics", "Genomic data - SNPs, Rare variants & CNVs. \\ RNA-Seq data - Gene expression (Read counts). \\ Epigenome data - DNA methylation (array). \\ Proteomic data - Protein counts.","right", options = list(container = "body")),
+               bsTooltip("omics", "Genomic data - SNPs, Rare variants & CNVs. \\ RNA-Seq data - Gene expression (Read counts). \\ Epigenome data - DNA methylation (array). \\ Proteomic data - Protein counts.","bottom", options = list(container = "body")),
             # Selecting outcome
-            checkboxGroupInput(inputId = "outselect", label ="Outcome/Phenotype selection", choices = list("Case-Control (Binary)"= 1, "Longitudinal"= 2, "Time-to-event (Survival)"= 3),inline=TRUE),
-            bsTooltip("outselect", "You can choose a single outcome or select joint outcomes. Only Case-Control + Longitudinal or Longitudinal + Survival","right", options = list(container = "body"))
+            checkboxGroupInput(inputId = "outselect", label ="Outcome/Phenotype selection", choices = list("Case-Control (Binary)"= 1, "Time-to-event (Survival)"= 3),inline=TRUE),
+            bsTooltip("outselect", "Choose a single outcome","bottom", options = list(container = "body"))
             
             ))
      ),
@@ -65,9 +63,10 @@ shinyUI(fluidPage(
   fluidRow(
      column(2,style='padding:0px;',wellPanel(
             h4("Study Design Parameters"),
-            numericInput("replicates", "Simulations", value = 1, min = 0, max = 10000),
-          #  numericInput("target", "Power target", value = 90, min = 0, max = 100),
-            
+            conditionalPanel(
+              condition = "(input.omics[0] != 'RNA-seq' || input.omics[1] == 'RNA-seq') && (input.select != 19 || input.select != 20)",
+              numericInput("replicates", "Simulations",value = 1, min = 1, max = 10000)
+            ),
             numericInput("obs", "Sample size", min = 1, max = 1000, value = 40),
             conditionalPanel(
             condition = "input.outselect == 1",
@@ -85,7 +84,7 @@ shinyUI(fluidPage(
             numericInput("eos", "End of study (Days)", value = 100, min = 0, max = 1000)
             ),
             numericInput("tratio", "Treatment Allocation Ratio", value = 0, min = 0, max = 1),
-            numericInput("treat", "Treatment Effect Size", value = 0.4, min = 0, max = 40),
+            numericInput("treat", "Treatment Effect Size", value = 0, min = 0, max = 40),
           
        conditionalPanel(
          condition = "input.outselect == 2",
@@ -102,10 +101,11 @@ shinyUI(fluidPage(
    #  h4("Gene-level data simulation Parameters"),
     conditionalPanel(
       condition = "input.omics[0] == 'RNA-seq' || input.omics[1] == 'RNA-seq' || input.omics[2] == 'RNA-seq'",
-      sliderInput("genes", "Genes", min = 1, max = 1000, value = 5),
+      numericInput("genes", "Genes", min = 1, max = 100000, value = 5),
       numericInput("reads", "Average baseline reads per gene", value = 100, min = 0, max = 500),
       numericInput("fc", "Fold Change (log2)", value = 2, min = -100, max = 100),
-      numericInput("disp", "Dispersion", value = 0.5, min = 0, max = 100)
+      numericInput("disp", "Dispersion", value = 0.5, min = 0, max = 100),
+      bsTooltip("disp", "Usual values for the square root dispersion (D) are between 0.1 and 1. The dispersion equation used in the NB distribution is 1/(D^2) ","right", options = list(container = "body"))
     ),
   #  h4("CpG site data simulation Parameters"),
     conditionalPanel(
@@ -129,13 +129,8 @@ shinyUI(fluidPage(
     )),
     
     # Methods selection
-    column(2,wellPanel(
-      selectInput("select", h4("Statistical integration & models"), choices = list("Joint regression model (LR)" = 1, "Joint regression model (Cox)"=16, "MOFA + Logistic regression" = 2,
-      "MOFA + Cox proportional hazards model" = 3,#"Generalised Linear Mixed Effects Model" = 4, 
-      "Mediation analysis + LR" = 5, "Mediation analysis + Survival" = 17, "Joint Non-negative Matrix Factorization (iCluster+)" = 6, 
-      #"Clustering + LR" = 14, "Clustering + Cox" = 15, "Sparse partial least square regression model" = 7, "Joint hierarchical Bayesian modelling (lme)" = 8, "GLM Path" = 9,
-      "Cox Path L1 Penalty" = 10, #"Partial least squares (Mixomics)" = 11, 
-      "Similarity Network Fusion + LR" = 12,"Similarity Network Fusion + Cox" = 13, "Multi Co-inertia analysis" = 18)),
+    column(3,wellPanel(
+      selectInput("select", h4("Statistical integration/analysis models"), choices = c()),
       bsTooltip("select", "Combination of multi-omics data integration methods & regression-based models for analysis","right", options = list(container = "body"))
       
       )),
@@ -161,7 +156,7 @@ shinyUI(fluidPage(
     column(2,
     downloadButton("dloadData", "Download Sample Data"),
     
-    column(2, br(), br(), br(), br(), actionButton("submit","Power Calculation", style = "color: white; 
+    column(2, br(), br(), actionButton("submit","Power Calculation", style = "color: white; 
                        background-color: green; height: 60px; width: 150px; text-align:center; text-indent: -2px; border-radius: 6px"))
     ),
        mainPanel(tags$style(type="text/css",
@@ -172,7 +167,11 @@ shinyUI(fluidPage(
            tabPanel("Data Replicate", tableOutput('table')), 
            tabPanel("Replicate Analysis Summary", verbatimTextOutput("summary")),
            tabPanel("Power Summary", verbatimTextOutput("powersummary")), 
-           tabPanel("Plots", plotlyOutput("plot"))#,height = 300, width = 300))
+           tabPanel("Plots", fluidRow(br(),
+                    column(3,textInput("label", "Variable label", "Dispersion 0.5")),
+                    checkboxInput("addline", "Add line", FALSE),
+                    column(12,plotlyOutput("plot")))
+                    )
          )
        )
        )
@@ -182,15 +181,20 @@ shinyUI(fluidPage(
         column(8,wellPanel(h5("In sequencing experiments we are fitting one model for each gene/exon/sequence of interest, and therefore performing thousands
                of tests. We need to correct for multiple testing using the Bonferroni correction and calculate the FDR.")))),
                fluidRow(
-                 column(8,mainPanel(
+                 column(12,mainPanel(
                    h3("Bonferroni correction"),
-                   numericInput("genes2", "Total number of genes", min = 1, max = 1000000, value = 100),
+                   numericInput("genes2", "Total number of genes, SNPs, CpG sites or features", min = 1, max = 1000000, value = 100),
                    numericInput("error2", "Significance threshold", value = 0.01, min = 0, max = 1),
-                   h6("Bonferroni correction for number of hypotheses tested (Number of genes)"),
+                   h6("Bonferroni correction for number of hypotheses tested"),
                    verbatimTextOutput("BC"),
                    h3("Distribution of calculated p-values"),
-                   plotlyOutput("distPlot")
-                 )), column(8,mainPanel(
+                   plotlyOutput("distPlot"),
+                 conditionalPanel(
+                 condition = "input.select == 19 || input.select == 20",
+                 h3("Estimated dispersion"),
+                 plotlyOutput("disphist")
+                   )
+                 )), column(12,mainPanel(
                    h3("FDR (False discovery rate)"),
                    verbatimTextOutput("false"),
                    plotlyOutput("fdrplot"))
@@ -209,12 +213,19 @@ shinyUI(fluidPage(
                mainPanel(img(src="1.png",height = 800),img(src="4.png", height = 400),img(src="5.png", height = 800))))),
       tabPanel("About", 
                fluidRow(
-                 column(8,wellPanel(h3("MOPower v1.01 (Beta), GNU General Public Licence"),"MOPower is a multi-omics power calculator, implemented with the latest integration and analysis models. Data is simulated using statistical distributions and user input parameters. Power is calculated based on the number of replicates
+                 column(8,wellPanel(h3("MOPower v1.02, GNU General Public Licence"),"MOPower is a multi-omics power calculator, implemented with the latest integration and analysis models. Data is simulated using statistical distributions and user input parameters. Power is calculated based on the number of replicates
                with a significant association for total effects of omics datasets with the outcome of interest (case-control or survival). See vignette for more details: https://github.com/HSyed91/MOPower. MOPower was developed at GOSgene, Institute of Child Health, University College London. This research is funded by the BRC."
                  ), img(src="NIHR.jpg",height = 50),"----",img(src="GOSgene.png", height = 50)
                  ))),
       tabPanel("News", fluidRow(
-        column(8,wellPanel(h3("Updates, new features & bug fixes"))))),
+        column(8,wellPanel(h3("Updates, new features & bug fixes")),
+               h5("10/04/2019 v1.02"),"1. Single omics power calculation of RNA-Seq data can now be calculated using edgeR's Exact test or Negative Binomial GLM. The output is now the power to detect differentially expressed genes between groups given a sample of genes (Q: How many genes will be differentially expressed?) Number of simulations input will disappear as this is not required.",br(),br(),
+               "2. Plot of estimated dispersion parameter is displayed for single omics RNA-Seq power calculation.", br(),br(), 
+               "3. An 'Add line' checkbox to add a new power calculation line to the power plot has been added.",br(),br(),
+               "4. Data replicate displayed in UI will now only show one feature from each omics. Download sample data will have the entire simulated dataset. This was too minimize the space taken by the display data.",br(),br(),
+               "5. Longitudinal outcome removed from simulation framework because there are no multi-omics analyses currently available to analyse the outcome.",br(),br(),
+               "6. Analysis options shown in menu are dependent on the outcome choice.",br(),br(),
+               "7. Dispersion parameter within the Negative-Binomial model used to simulate gene expression data is now defined using the edgeR definition of 1/(D^2)"))),
       tabPanel("FAQ", fluidRow(
         column(8,wellPanel(h3("Frequently Asked Questions"), "Please submit your questions via email to h.syed@ucl.ac.uk. Questions and answers will be posted on this page once the question has been answered or the issue has been resolved.")))),
       tabPanel("References", fluidRow(
@@ -251,6 +262,3 @@ shinyUI(fluidPage(
      )
    )
   )
-
-
-
