@@ -1,5 +1,5 @@
-# MOPower v1.0.1
-# This is the server logic of a Shiny web application. You can run the 
+# MOPower v1.0.2
+# This is the server logic of the Shiny web application. You can run the 
 # application by clicking 'Run App' above.
 
 library(CancerSubtypes)
@@ -26,6 +26,7 @@ library(iCluster)
 library(BiocInstaller)
 library(BiocVersion)
 library(MOFA)
+library(edgeR)
 
 # v This section is for shinyapps.io v
 #use_python("/usr/bin/python3.5")
@@ -34,352 +35,421 @@ library(MOFA)
 #py_install("mofapy")
 
 # Define server logic
+
+graph1 <- as.data.frame(matrix(NA, ncol = 0, nrow = 0))
+
 shinyServer(function(input, output, session) {
-  # Bonferroni correction value
-  output$BC <- renderPrint(
-    {
-      input$error2/input$genes2
-    }
-  )
-  datainputs <- reactive({
+  
+  # Reactive datatable simulation
+  # Simulation of download data and UI display data
+ datainputs <- reactive({
   # Study design parameters
   # Reactive datatable
   n <- input$obs
   EndofStudy <- input$eos
   Treatment <- rbinom(n,1,input$tratio)
-  # Gene-level parameters
+  # Defining gene-level parameters
   numsnp <- input$snps
   numgene <- input$genes
   Patients <- 1:n
   sum1 <- -0
   dt <- data.frame(Patients,Treatment)
+  showdt <- data.frame(Patients,Treatment)
+  
+  # SNPs and rare variants
   if("Genome" %in% input$omics){
-  # SNPs
-  snpdt <- as.data.frame(matrix(NA, ncol = numsnp, nrow = n))
-  beta <- c(1:numsnp)
-  agg<- as.data.frame(matrix(NA, ncol = 4, nrow = n))
-  linpred <- matrix(NA, nrow = n,ncol=numsnp)
-  # SNP data
-  for(i in 1:numsnp){
-    maf <- runif(1,input$mafint[1], input$mafint[2])
-    snpdt[i] <- cbind(rbinom(n,2,maf))
-    colnames(snpdt)[i] <- paste("SNP", i, sep = "")
-    beta[i] <- sqrt(input$snpeffect/2/maf/(1-maf))
+    snpdt <- as.data.frame(matrix(NA, ncol = numsnp, nrow = n))
+    beta <- c(1:numsnp)
+    agg<- as.data.frame(matrix(NA, ncol = 4, nrow = n))
+    linpred <- matrix(NA, nrow = n,ncol=numsnp)
+    # SNP data simulation
+    for(i in 1:numsnp){
+      maf <- runif(1,input$mafint[1], input$mafint[2])
+      snpdt[i] <- cbind(rbinom(n,2,maf))
+      colnames(snpdt)[i] <- paste("SNP", i, sep = "")
+      beta[i] <- sqrt(input$snpeffect/2/maf/(1-maf))
+    }
+    agg <- t(t(snpdt)*beta)
+    sum1 <- apply(agg, 1, sum)
+    dt <- cbind(dt,snpdt)
+    showdt$SNP <- snpdt[,1]
   }
-  agg <- t(t(snpdt)*beta)
-  sum1 <- apply(agg, 1, sum)
-  dt <- cbind(dt,snpdt)
-  }
+  
   # Outcome (case-control)
   if(1 %in% input$outselect){
     if("Genome" %in% input$omics){
-  b0 <- log(input$ccratio/(1-input$ccratio)) -  sum1 - (Treatment*input$treat)
-  linpred <- b0 + sum1 + (Treatment*input$treat)
-  pi <- exp(linpred) / (1 + exp(linpred))
-  Group <- rbinom(n, size=1, prob=pi)
+      b0 <- log(input$ccratio/(1-input$ccratio)) -  sum1 - (Treatment*input$treat)
+      linpred <- b0 + sum1 + (Treatment*input$treat)
+      pi <- exp(linpred) / (1 + exp(linpred))
+      Group <- rbinom(n, size=1, prob=pi)
     }
     else{
       Group <- rbinom(n, size=1, prob=input$ccratio)
     }
-  dt$Group <- Group
+    dt$Group <- Group
+    showdt$Group <- Group
   }
-  # Outcome (Survival)
-  else if(3 %in% input$outselect){
-  # baseline hazard
-  lambda <- input$Stime*exp(-sum1 - (Treatment*input$treat))
-  survtime <- rweibull(input$obs,1, scale=lambda)
-  censtime <- rbinom(input$obs,1,1-(input$Ctime*0.01))
-  # Right censoring as percentage
-  Group <- ifelse(survtime >= input$eos,0,censtime)
-  Observedtime <- ifelse(survtime>=input$eos,input$eos,survtime)
-  # v Censoring is random v
-  #Observedtime <- ifelse(survtime>input$eos & censtime>input$eos,input$eos,pmin(survtime,censtime))
-  #Group <- ifelse(survtime < censtime & survtime < input$eos,1,0)
-  dt$Censoring <- Group
-  dt$Observedtime <- Observedtime
-  dt$EndofStudy <- EndofStudy
-  }
-  # Outcome (longitudinal)
-  else if(2 %in% input$outselect){
-    timevec <- matrix(rep(seq(0, input$eos, input$fusamples), input$obs), ncol=(input$eos/input$fusamples)+1, nrow=input$obs, byrow=T)
-    colnames(timevec) <- colnames(timevec, do.NULL = FALSE, prefix = "Time")
-    dt <- cbind(dt,timevec)
-  }
-  # Gene expression
-  if("RNA-seq" %in% input$omics){
-  mexp <-  exp(Group*input$fc+log(input$reads)) # N can be input or estimated from uniform distribution. N = library size
-  disp <- input$disp #  or variance = mexp*(1+mexp*input$disp)or variance=mexp+(mexp^2/input$disp)
-  GE <- as.data.frame(matrix(NA, ncol = numgene, nrow = n))
-  for(j in 1:numgene){
-    GE[j] <- cbind(rnbinom(n, size=disp, mu=mexp))
-    colnames(GE)[j] <- paste("GE", j, sep = "")
-  }
-  # v Time vector for gene expression over time v
-  #timevec <- matrix(rep(seq(0, input$eos, input$fusamples), input$obs), ncol=(input$eos/input$fusamples)+1, nrow=input$obs, byrow=T)
-  #colnames(timevec) <- colnames(timevec, do.NULL = FALSE, prefix = "Time")
   
+  # Outcome (Time-to-event)
+  else if(3 %in% input$outselect){
+    # baseline hazard
+    lambda <- input$Stime*exp(-sum1 - (Treatment*input$treat))
+    survtime <- rweibull(input$obs,1, scale=lambda)
+    censtime <- rbinom(input$obs,1,1-(input$Ctime*0.01))
+    # Right censoring as percentage
+    Group <- ifelse(survtime >= input$eos,0,censtime)
+    Observedtime <- ifelse(survtime>=input$eos,input$eos,survtime)
+    # v Censoring is random within sample v
+    #Observedtime <- ifelse(survtime>input$eos & censtime>input$eos,input$eos,pmin(survtime,censtime))
+    #Group <- ifelse(survtime < censtime & survtime < input$eos,1,0)
+    dt$Censoring <- Group
+    dt$Observedtime <- Observedtime
+    dt$EndofStudy <- EndofStudy
+    showdt$Censoring <- Group
+    showdt$Observedtime <- Observedtime
+    showdt$EndofStudy <- EndofStudy
+  }
+  
+  # Outcome (longitudinal) # needs to be a new gene expression value for each timepoint
+  #if(2 %in% input$outselect){
+    #timevec <- matrix(rep(seq(0, input$eos, input$fusamples), input$obs), ncol=(input$eos/input$fusamples)+1, nrow=input$obs, byrow=T)
+    #colnames(timevec) <- colnames(timevec, do.NULL = FALSE, prefix = "Time")
+    #dt <- cbind(dt,timevec)
+    #showdt$TimePoint <- timevec[,1]
+  #}
+  
+  # Gene expression data simulation
+  if("RNA-seq" %in% input$omics){
+    mexp <-  exp(Group*input$fc+log(input$reads)) # N can be input or estimated from uniform distribution. N = library size
+    disp <- 1/input$disp^2 #  or variance = mexp*(1+mexp*input$disp)or variance=mexp+(mexp^2/input$disp)
+    GE <- as.data.frame(matrix(NA, ncol = numgene, nrow = n))
+    for(j in 1:numgene){
+    GE[j] <- cbind(rnbinom(n, size=1/(input$disp^2), mu=mexp))
+    colnames(GE)[j] <- paste("GE", j, sep = "")
+    }
   # DT without Methylation
   dt <- cbind(dt,GE)
+  showdt$GeneExp <- GE[,1]
   }
   
   # DNA methylation - array CpG sites
   if("Epigenome" %in% input$omics){
-  sites <- input$cpg
-  # r and v are unmeth and hemimeth are column numbers
-  r <- 0
-  v <- 0
-  unsites <- as.data.frame(matrix(NA, ncol = input$unmeth, nrow = n))
-  hemisites <-as.data.frame(matrix(NA, ncol = input$hemimeth, nrow = n))
-  methsites <- as.data.frame(matrix(NA, ncol = sites, nrow = n))
-  for(k in 1:sites){
-    meth = c(1:n)
-    for(m in 1:length(Group)){ 
-      if(Group[m]==1){
-        meth[m] <- rbeta(1,input$casemeth,input$casemeth2)
-      }
-      else{
+    sites <- input$cpg
+    # r and v are unmeth and hemimeth column numbers
+    r <- 0
+    v <- 0
+    unsites <- as.data.frame(matrix(NA, ncol = input$unmeth, nrow = n))
+    hemisites <-as.data.frame(matrix(NA, ncol = input$hemimeth, nrow = n))
+    methsites <- as.data.frame(matrix(NA, ncol = sites, nrow = n))
+    for(k in 1:sites){
+      meth = c(1:n)
+      for(m in 1:length(Group)){ 
+        if(Group[m]==1){
+          meth[m] <- rbeta(1,input$casemeth,input$casemeth2)
+        }
+        else {
         meth[m] <- rbeta(1,input$contmeth,input$contmeth2)
+        }
       }
+      methsites[,k] = cbind(meth)
+      colnames(methsites)[k] <- paste("CpGmeth", k, sep = "")
     }
-    methsites[,k] = cbind(meth)
-    colnames(methsites)[k] <- paste("CpGmeth", k, sep = "")
-  }
- # unmeth and hemi meth sites
-  if(1 %in% input$checkmeth){
-  for(v in 1:input$unmeth){
-  unsites[,v] <- rbeta(n,1,6)
-  colnames(unsites)[v] <- paste("CpGmeth", v+k+r, sep = "")
-  }
-    methsites <- cbind(methsites,unsites)
-  }
+    # unmeth and hemi meth sites
+    if(1 %in% input$checkmeth){
+      for(v in 1:input$unmeth){
+        unsites[,v] <- rbeta(n,1,6)
+        colnames(unsites)[v] <- paste("CpGmeth", v+k+r, sep = "")
+      }
+      methsites <- cbind(methsites,unsites)
+    }
     if(2 %in% input$checkmeth){
-  for(r in 1:input$hemimeth){
-    hemisites[,r] <- rbeta(n,6,6)
-    colnames(hemisites)[r] <- paste("CpGmeth", r+v+k, sep = "")
-  }
+      for(r in 1:input$hemimeth){
+        hemisites[,r] <- rbeta(n,6,6)
+        colnames(hemisites)[r] <- paste("CpGmeth", r+v+k, sep = "")
+      }
       methsites <- cbind(methsites,hemisites)
     }
-
-  dt <- cbind(dt,methsites)
+    dt <- cbind(dt,methsites)
+    showdt$CpGMeth <- methsites[,1]
   }
-
-  # Print sample data
-   dt
-  })
-  output$table <- renderTable({
-    
-    head(datainputs(), n = 20)
-    })   
-
- #power calc button 
- #reactive({
- #observeEvent(input$submit,{session$sendCustomMessage(type = 'message', message = 'Power is being calculated. Please wait....')
- # })
- #}) 
+  
+  # Sample data and download data need to be seperated in a list
+  list(a=dt,b=showdt)
+ })
+  
+  # Render data in UI
+ output$table <- renderTable({
+  head(datainputs()$b, n = 20)
+ })
  
-  # Integration and analysis models
-  methods <- eventReactive(input$submit, {
+##################################### End of sample data and download data simulation ############################################# 
+ 
+ # Power calculation section
+ # Simulate data, integration analysis models and power
+ #methods <- eventReactive(input$submit, {
+ methods <- observeEvent(input$submit, {
+  
+  # Dataframes for storing p-values and sample size number
   pcaldf <- as.data.frame(matrix(NA, ncol = 2, nrow = 10))
-  pdf2 <- as.data.frame(matrix(NA, ncol = 2, nrow = input$replicates*10))
-  pdfadd <- as.data.frame(matrix(NA, ncol = 2, nrow = 10))
+  pdf2 <- as.data.frame(matrix(NA, ncol = 2, nrow = 1))
+  pdfadd <- as.data.frame(matrix(NA, ncol = 2, nrow = 1))
+  estdisp <- as.data.frame(matrix(NA, ncol = 1, nrow = 0))
+  # Number of simulations
+  if("RNA-seq" %in% input$omics && ((19 %in% input$select) || (20 %in% input$select))){
+    simval <- 1
+  }
+  else{
+    simval <- input$replicates
+  }
   
+  # Progress bar
   withProgress(message = 'Calculating Power', value = 0, {
-  for (z in 1:10){ # power at 10 intervals on plot
-  value <- 0
-  value2 <- 0
-  pdf <- as.data.frame(matrix(NA, ncol = 1, nrow = input$replicates))
-  pd <- as.data.frame(matrix(NA, ncol = 1, nrow = input$replicates))
-  
-  #Simulate all data replicates  
-  for (h in 1:input$replicates){
- 
-  n <- input$obs*z
-  sites <- 0
-  unsites <- 0
-  hemisites <- 0
-  EndofStudy <- input$eos
-  methset <- NULL
-  geneset <- NULL
-  snpset <- NULL
-  sum1 <- 0
-  Treatment <- rbinom(n,1,input$tratio)
-  # Gene-level parameters
-  numsnp <- input$snps
-  numgene <- input$genes
-      Patients <- 1:n
-      
-      if("Genome" %in% input$omics){
-      #SNPs
-      snpdt <- as.data.frame(matrix(NA, ncol = numsnp, nrow = n))
-      beta <- c(1:numsnp)
-      agg<- as.data.frame(matrix(NA, ncol = 4, nrow = n))
-      linpred <- matrix(NA, nrow = n,ncol=numsnp)
-      for(i in 1:numsnp){
-        maf <- runif(1,input$mafint[1], input$mafint[2])
-        snpdt[i] <- cbind(rbinom(n,2,maf))
-        colnames(snpdt)[i] <- paste("SNP", i, sep = "")
-        beta[i] <- sqrt(input$snpeffect/2/maf/(1-maf))
-      }
-      agg <- t(t(snpdt)*beta)
-      sum1 <- apply(agg, 1, sum)
-      dt <- data.frame(Patients,Treatment,EndofStudy,snpdt)
-      allsnp <- dt[ , grepl( "SNP" , names( dt ) ) ]
-      snpset <- apply(allsnp, 1, sum)
-      }
+    
+    # Power for 10 different sample sizes (User specified sample size --> increasing)
+    for (z in 1:10){ 
+      value <- 0
+      value2 <- 0
+      # Matrix to store p-values
+      pdf <- as.data.frame(matrix(NA, ncol = 1, nrow = 1))
+      # Matrix to store sample size number
+      pd <- as.data.frame(matrix(NA, ncol = 1, nrow = 0))
+
+      # Simulate all data replicates  
+      for (h in 1:simval){
+        n <- input$obs*z
+        sites <- 0
+        unsites <- 0
+        hemisites <- 0
+        EndofStudy <- input$eos
+        methset <- NULL
+        geneset <- NULL
+        snpset <- NULL
+        sum1 <- 0
+        Treatment <- rbinom(n,1,input$tratio)
+        numsnp <- input$snps
+        numgene <- input$genes
+        Patients <- 1:n
+        
+        # SNPs and rare varaints
+        if("Genome" %in% input$omics){
+          snpdt <- as.data.frame(matrix(NA, ncol = numsnp, nrow = n))
+          beta <- c(1:numsnp)
+          agg<- as.data.frame(matrix(NA, ncol = 4, nrow = n))
+          linpred <- matrix(NA, nrow = n,ncol=numsnp)
+          for(i in 1:numsnp){
+            maf <- runif(1,input$mafint[1], input$mafint[2])
+            snpdt[i] <- cbind(rbinom(n,2,maf))
+            colnames(snpdt)[i] <- paste("SNP", i, sep = "")
+            beta[i] <- sqrt(input$snpeffect/2/maf/(1-maf))
+          }
+          agg <- t(t(snpdt)*beta)
+          sum1 <- apply(agg, 1, sum)
+          dt <- data.frame(Patients,Treatment,EndofStudy,snpdt)
+          allsnp <- dt[ , grepl( "SNP" , names( dt ) ) ]
+          snpset <- apply(allsnp, 1, sum)
+        }
         else{
           dt <- data.frame(Patients,Treatment,EndofStudy)
         }
-      # Outcome (case-control)
-      if(1 %in% input$outselect){
-        if("Genome" %in% input$omics){
-        b0 <- log(input$ccratio/(1-input$ccratio)) -  sum1 - (Treatment*input$treat)
-        linpred <- b0 + sum1 + (Treatment*input$treat)
-        pi <- exp(linpred) / (1 + exp(linpred))
-        Group <- rbinom(n, size=1, prob=pi)
-      }
-      else{
-        Group <- rbinom(n, size=1, prob=input$ccratio)
-      }
-        dt$Group <- Group
-      }
       
-      # Outcome (survival)
-      else if(3 %in% input$outselect){
-        # baseline hazard
-        lambda <- input$Stime*exp(-sum1 - (Treatment*input$treat))
-        survtime <- rweibull(input$obs*z,1, scale=lambda)
-        censtime <- rbinom(n,1,1-(input$Ctime*0.01))
-        # right censoring
-        Group <- ifelse(survtime >= input$eos,0,censtime)
-        Observedtime <- ifelse(survtime>=input$eos,input$eos,survtime)
-        dt$Group <- Group
-        dt$Observedtime <- Observedtime
-      }
+        # Outcome (case-control)
+        if(1 %in% input$outselect){
+          if("Genome" %in% input$omics){
+            b0 <- log(input$ccratio/(1-input$ccratio)) -  sum1 - (Treatment*input$treat)
+            linpred <- b0 + sum1 + (Treatment*input$treat)
+            pi <- exp(linpred) / (1 + exp(linpred))
+            Group <- rbinom(n, size=1, prob=pi)
+          }
+          else{
+            Group <- rbinom(n, size=1, prob=input$ccratio)
+          }
+          dt$Group <- Group
+        }
       
-      # Gene expression
-      if("RNA-seq" %in% input$omics){
-      mexp <-  exp(Group*input$fc+log(input$reads)) 
-      disp <- input$disp 
-      GE <- as.data.frame(matrix(NA, ncol = numgene, nrow = n))
-      for(j in 1:numgene){
-        GE[j] <- cbind(rnbinom(n, size=disp, mu=mexp))
-        colnames(GE)[j] <- paste("Genecount", j, sep = "")
-      }
-      dt <- cbind(dt,GE)
-      allGE <- dt[ , grepl( "Genecount" , names( dt ) ) ]
-      geneset <- apply(allGE, 1, sum)
-      }
-     # timevec <- matrix(rep(seq(0, input$eos, input$fusamples), n), ncol=(input$eos/input$fusamples)+1, nrow=n, byrow=T)
-     # colnames(timevec) <- colnames(timevec, do.NULL = FALSE, prefix = "Time")
+        # Outcome (survival)
+        else if(3 %in% input$outselect){
+          # baseline hazard
+          lambda <- input$Stime*exp(-sum1 - (Treatment*input$treat))
+          survtime <- rweibull(input$obs*z,1, scale=lambda)
+          censtime <- rbinom(n,1,1-(input$Ctime*0.01))
+          # right censoring
+          Group <- ifelse(survtime >= input$eos,0,censtime)
+          Observedtime <- ifelse(survtime>=input$eos,input$eos,survtime)
+          dt$Group <- Group
+          dt$Observedtime <- Observedtime
+        }
       
-      # DNA methylation - array CpG sites
-      if("Epigenome" %in% input$omics){
-        sites <- input$cpg
-        v <- 0
-        r <- 0
-        unsites <- as.data.frame(matrix(NA, ncol = input$unmeth, nrow = n))
-        hemisites <-as.data.frame(matrix(NA, ncol = input$hemimeth, nrow = n))
-        methsites <- as.data.frame(matrix(NA, ncol = sites, nrow = n))
-        for(k in 1:sites){
-          meth = c(1:n)
-          for(m in 1:length(Group)){ 
-            if(Group[m]==1){
-              meth[m] <- rbeta(1,input$casemeth,input$casemeth2)
+        # Gene expression
+        # For exact test and NB model, data is simulated for multiple genes for each individual.
+        if("RNA-seq" %in% input$omics && ((19 %in% input$select) || (20 %in% input$select))){
+          value<-0
+          GE <- as.data.frame(matrix(NA, ncol = n, nrow = numgene))
+          for (i in 1:n){
+            if (Group[i] == 1){
+              mexp <-  exp(1*input$fc+log(input$reads))
             }
             else{
-              meth[m] <- rbeta(1,input$contmeth,input$contmeth2)
+              mexp <-  exp(0*input$fc+log(input$reads))
             }
+            GE[i]<-cbind(rnbinom(numgene, size=1/(input$disp^2), mu=mexp))
           }
-          methsites[,k] = cbind(meth)
-          colnames(methsites)[k] <- paste("CpGmeth", k, sep = "")
+          # edgeR format conversion
+          y <- DGEList(counts=GE, group=Group)
+          y <- calcNormFactors(y)
+          design <- model.matrix(~Group)
+          y <- estimateDisp(y,design)
+          di <- estimateDisp(y, design)
+          d1 <- as.data.frame(di$tagwise.dispersion) 
+          estdisp <- rbind(estdisp,d1)
         }
-        # unmeth and hemi meth sites
-        if(1 %in% input$checkmeth){
-
-          for(v in 1:input$unmeth){
+        # Single or multiple gene simulation. Transpose of above simulation.
+        else{
+          mexp <-  exp(Group*input$fc+log(input$reads)) 
+          disp <- 1/(input$disp^2) 
+          GE <- as.data.frame(matrix(NA, ncol = numgene, nrow = n))
+          for(j in 1:numgene){
+            GE[j] <- cbind(rnbinom(n, size=disp, mu=mexp))
+            colnames(GE)[j] <- paste("Genecount", j, sep = "")
+          }
+          dt <- cbind(dt,GE)
+          allGE <- dt[ , grepl( "Genecount" , names( dt ) ) ]
+          geneset <- apply(allGE, 1, sum)
+        }
+     
+        # DNA methylation - array CpG sites
+        if("Epigenome" %in% input$omics){
+          sites <- input$cpg
+          v <- 0
+          r <- 0
+          unsites <- as.data.frame(matrix(NA, ncol = input$unmeth, nrow = n))
+          hemisites <-as.data.frame(matrix(NA, ncol = input$hemimeth, nrow = n))
+          methsites <- as.data.frame(matrix(NA, ncol = sites, nrow = n))
+          for(k in 1:sites){
+            meth = c(1:n)
+            for(m in 1:length(Group)){ 
+              if(Group[m]==1){
+                meth[m] <- rbeta(1,input$casemeth,input$casemeth2)
+              }
+              else{
+                meth[m] <- rbeta(1,input$contmeth,input$contmeth2)
+              }
+            }
+            methsites[,k] = cbind(meth)
+            colnames(methsites)[k] <- paste("CpGmeth", k, sep = "")
+          }
+          # unmeth and hemi meth sites
+          if(1 %in% input$checkmeth){
+            for(v in 1:input$unmeth){
             unsites[,v] <- rbeta(n,1,6)
             colnames(unsites)[v] <- paste("CpGmeth", v+k+r, sep = "")
+            }
+            methsites <- cbind(methsites,unsites)
           }
-          methsites <- cbind(methsites,unsites)
-        }
           if(2 %in% input$checkmeth){
-          for(r in 1:input$hemimeth){
-            hemisites[,r] <- rbeta(n,6,6)
-            colnames(hemisites)[r] <- paste("CpGmeth", r+v+k, sep = "")
-          }
+            for(r in 1:input$hemimeth){
+              hemisites[,r] <- rbeta(n,6,6)
+              colnames(hemisites)[r] <- paste("CpGmeth", r+v+k, sep = "")
+            }
             methsites <- cbind(methsites,hemisites)
           }
-
-        
-        dt <- cbind(dt,methsites)
-        allmeth <- dt[ , grepl( "CpGmeth" , names( dt ) ) ]
-        methset <- apply(allmeth, 1, sum)
-      }
-      # Joining data
-    
-    # Progress bar
-    incProgress(1/z, detail = paste("Please wait...."))
-  
-  # Methods
-  # Joint regression model
-  if(input$select==1){
-    dta <- data.frame(Group)
-    if (is.null(geneset) == FALSE){
-      dta <- cbind(dta,geneset)
-    }
-    if (is.null(snpset)== FALSE){
-      dta <- cbind(dta,snpset)
-    }
-    if (is.null(methset)== FALSE){
-      dta <- cbind(dta,methset)
-    }
-    if (input$tratio > 0 && 4 %in% input$checkGroup){
-      dta <- cbind(dta,Treatment)
-    }
- 
-  # Logistic regression
-    model <- glm(Group~.,data=dta,family=binomial(link='logit'))
-    sumup <- summary(model)
-    model2 <- glm(Group~1,data=dta,family=binomial(link='logit'))
-    anova <- anova(model,model2,test="Chisq")  
-    pval1 <- anova[2,5]
-    pdf[h,] <- pval1
- #  pdf2[h,2] <- pval1
-
-    if(pdf[h,]<=input$error){
-      value <- value + 1
-    }
-  }
-    
-    if(input$select==16){
-      dta <- data.frame(Group)
-      if (is.null(geneset) == FALSE){
-        dta <- cbind(dta,geneset)
-      }
-      if (is.null(snpset)== FALSE){
-        dta <- cbind(dta,snpset)
-      }
-      if (is.null(methset)== FALSE){
-        dta <- cbind(dta,methset)
-      }
-      if (input$tratio > 0 && 4 %in% input$checkGroup){
-        dta <- cbind(dta,Treatment)
-      }
+          dt <- cbind(dt,methsites)
+          allmeth <- dt[ , grepl( "CpGmeth" , names( dt ) ) ]
+          methset <- apply(allmeth, 1, sum)
+        }
       
-      # Cox PH regression
-      model <- coxph(Surv(Observedtime, Group) ~.,data=dta)
-      sumup <- summary(model)
-      model2 <- coxph(Surv(Observedtime, Group) ~1,data=dta)
-      anova <- anova(model,model2,test="Chisq")  
-      pval1 <- anova[2,5]
-      pdf[h,] <- pval1
-      if(pdf[h,]<=input$error){
-        value <- value + 1
+        # Progress bar
+        incProgress(1/z, detail = paste("Please wait...."))
+  
+        # Analysis methods section
+        
+        # Logistic regression model
+        # Data formatting
+        if(input$select==1){
+          dta <- data.frame(Group)
+          if (is.null(geneset) == FALSE){
+            dta <- cbind(dta,geneset)
+          }
+          if (is.null(snpset)== FALSE){
+            dta <- cbind(dta,snpset)
+          }
+          if (is.null(methset)== FALSE){
+            dta <- cbind(dta,methset)
+          }
+          if (input$tratio > 0 && 4 %in% input$checkGroup){
+            dta <- cbind(dta,Treatment)
+          }
+        
+          # GLM model
+          model <- glm(Group~.,data=dta,family=binomial(link='logit'))
+          # sumup is printed in UI as an analysis replicate
+          sumup <- summary(model)
+          model2 <- glm(Group~1,data=dta,family=binomial(link='logit'))
+          anova <- anova(model,model2,test="Chisq")  
+          pval1 <- anova[2,5]
+          pdf[h,] <- pval1
+
+          if(pdf[h,]<=input$error){
+            value <- value + 1
+          }
+        }
+  
+        # Cox peoportional hazards model  
+        if(input$select==16){
+          dta <- data.frame(Group)
+          if (is.null(geneset) == FALSE){
+            dta <- cbind(dta,geneset)
+          }
+          if (is.null(snpset)== FALSE){
+            dta <- cbind(dta,snpset)
+          }
+          if (is.null(methset)== FALSE){
+            dta <- cbind(dta,methset)
+          }
+          if (input$tratio > 0 && 4 %in% input$checkGroup){
+            dta <- cbind(dta,Treatment)
+          }
+      
+          model <- coxph(Surv(Observedtime, Group) ~.,data=dta)
+          sumup <- summary(model)
+          model2 <- coxph(Surv(Observedtime, Group) ~1,data=dta)
+          anova <- anova(model,model2,test="Chisq")  
+          pval1 <- anova[2,5]
+          pdf[h,] <- pval1
+          if(pdf[h,]<=input$error){
+            value <- value + 1
+          }
+        }
+    
+        # Exact test (RNA-seq data only)
+        if(input$select==19){
+          et <- exactTest(y)
+          sumup <- topTags(et)
+          for (k in 1:numgene){
+            pdf[k,] <- et$table[k,3]
+            if(pdf[k,]<=input$error){
+              value <- value + 1
+            }
+          pd[nrow(pd)+1,1]<- z*input$obs
+          }
+          }
+        
+    
+        # NB GLM
+        if(input$select==20){
+      fit <- glmQLFit(y, design)
+      nbqlf <- glmQLFTest(fit,coef=2)
+      sumup <- topTags(nbqlf)
+      for (k in 1:numgene){
+        pdf[k,] <- nbqlf$table[k,4]
+        if(pdf[k,]<=input$error){
+          value <- value + 1
+        }
+       pd[nrow(pd)+1,1]<- z*input$obs
       }
     }
     
-  # Cox Path L1 Penalty
-    if(input$select==10){
+        # Cox Path L1 Penalty
+        if(input$select==10){
       
       features <- data.frame(matrix(ncol=0,nrow=n))
       if (is.null(geneset) == FALSE){
@@ -400,7 +470,7 @@ shinyServer(function(input, output, session) {
       last <- tail(fit.a$df, n=1)
       b <- lr.test(fit.a$loglik[len], fit.a$loglik[1], alpha = input$error, df = last)
       pdf[h,] <- b$p.value
-      if(z==10 && h==input$replicates){
+      if(z==10 && h==simval){
        sumup <- summary(fit.a) 
       }
       if(pdf[h,]<=input$error){
@@ -408,8 +478,8 @@ shinyServer(function(input, output, session) {
       } 
     }
     
-    # mediation analysis
-    if(input$select==5 || input$select == 17){
+      # Mediation analysis
+      if(input$select==5 || input$select == 17){
       
       if(2 %in% input$mediator){
         mediator <- geneset
@@ -473,9 +543,9 @@ shinyServer(function(input, output, session) {
       }
       
     }
-    
-    #mofa
-   if(input$select==2 || input$select==3){
+
+    # MOFA
+    if(input$select==2 || input$select==3){
   
      a <- list()
      
@@ -522,28 +592,18 @@ shinyServer(function(input, output, session) {
   invisible(capture.output(MOFAobject <- createMOFAobject(a)))
   ModelOptions <- getDefaultModelOptions(MOFAobject)
   DataOptions <- getDefaultDataOptions()
-  # DirOptions <- list("dataDir" = tempdir(), "outFile" = tempfile()) ## old
   invisible(capture.output(TrainOptions <- getDefaultTrainOptions()))
   TrainOptions$DropFactorThreshold <- input$mofathresh
   TrainOptions$seed <- runif(1)
- # TrainOptions$maxiter <- 5
   invisible(capture.output(MOFAobject <- prepareMOFA(MOFAobject, DataOptions = DataOptions, ModelOptions = ModelOptions, TrainOptions = TrainOptions)))
   invisible(capture.output(MOFAobject <- try(runMOFA(MOFAobject))))
-  #fil <- tempfile("/home/shiny/.virtualenvs/r-reticulate/mofaobject", fileext = ".rds")
-  #saveRDS(MOFAobject, fil)
-  #readRDS("/home/shiny/.virtualenvs/r-reticulate/mofaobject.rds")
-  
+
   if ("try-error" %in% class(MOFAobject)) {     #(class(MOFAobject) == "try-error") {
     p <- 1
   }
   else{
    r2 <- calculateVarianceExplained(MOFAobject)
-   # v factor reduction v
-    # fact <- apply(r2$R2PerFactor[,c(names(a))], 1, sum)
-    #for(m in 1:length(fact))
-    #  if(fact[m]>=input$mofathresh){
-    #    count <- m  
-    #  }
+
     MOFAfactors <- getFactors(MOFAobject, factors="all", as.data.frame = F)
     dtcov <- data.frame(Group, MOFAfactors)
     if(input$select==2){
@@ -564,8 +624,9 @@ pdf[h,] <- p
    value <- value + 1
  } 
    }
-    #nmf + LR
-     if(input$select==6){
+  
+       # NMF + LR
+        if(input$select==6){
        # SNF splitting as a list can also be used here
        GBM <- data.frame(matrix(ncol=0,nrow=n))
        if (is.null(geneset) == FALSE){
@@ -594,8 +655,9 @@ pdf[h,] <- p
         value <- value + 1
       } 
     }
-    #snf + LR
-    if(input$select==12){
+  
+        # SNF + LR
+        if(input$select==12){
       GBM <- c()
       if (is.null(geneset) == FALSE){
         GBM1 <- data.matrix(allGE)
@@ -623,8 +685,9 @@ pdf[h,] <- p
         value <- value + 1
       } 
     }
-    # survival snf
-    if(input$select==13){
+    
+        # SNF + Cox
+        if(input$select==13){
       GBM <- c()
       if (is.null(geneset) == FALSE){
         data1=FSbyCox(t(data.matrix(allGE)),Observedtime,Group,cutoff=0.05)
@@ -650,8 +713,6 @@ pdf[h,] <- p
         data2=FSbyCox(t(data.matrix(allsnp)),Observedtime,Group,cutoff=0.05)
         GBM=append(GBM,list(data2))
       }
-     # if (input$tratio > 0){
-    #  }
    
     result1<- try(ExecuteSNF(GBM, clusterNum=3, K=20, alpha=0.5, t=20,plot = FALSE))
     if ("try-error" %in% class(result1)) {     #(class(MOFAobject) == "try-error") {
@@ -670,8 +731,8 @@ pdf[h,] <- p
     } 
     }
     
-  # MCIA - correlation between omics p-value
-    if(input$select==18){
+        # MCIA - correlation between omics p-values
+        if(input$select==18){
       data <- c()
       if (is.null(geneset) == FALSE){
         dta <- list(t(allGE))
@@ -698,13 +759,29 @@ pdf[h,] <- p
     } 
       }
     }
-   pd[h,1]<- z*input$obs
-    } #end of methods bracket - end of h
-    # labels for plot
+  
+        # Populating sample size dataframe
+        if(input$select != 19 && input$select != 20){
+          pd[h,1]<- z*input$obs 
+        }
+   
+      }
+      
+####################################### End of number of simulations ######################      
+      
+      # Labels for power text output
       colnames(pcaldf)[1] <- "SampleSize"
       colnames(pcaldf)[2] <- "Power"
-      power <- value * 100 / (input$replicates)
-      pcaldf[z,] <- list(n,power)#,row.names = "%")
+      
+      if("RNA-seq" %in% input$omics && ((19 %in% input$select) || (20 %in% input$select))){
+      # number of sig genes
+      power <- value*100/(input$genes)
+      }
+      else{
+      power <- value * 100 / (simval)
+      }
+      
+      pcaldf[z,] <- list(n,power)
       if(z == 1){
       pdf2 <- cbind(pd,pdf)
       }
@@ -712,114 +789,182 @@ pdf[h,] <- p
       pdfadd <- cbind(pd,pdf)
       pdf2 <- rbind(pdf2,pdfadd)
       }
-    }
-    })
-
+      }
+     
+  
+################### End of different sample size power calculation ###########################
+  
+    # Labels for p-value distribution plot
     melted = melt(pcaldf, id.vars="SampleSize")
     colnames(pdf2)[1] <- "SampleSize"
     colnames(pdf2)[2] <- "pvalue"
     
-    #fdr page histogram
+    # p-value histogram
     output$distPlot <- renderPlotly({
-      
-     hist <-  ggplot(data = pdf2, aes(x=pvalue)) + geom_histogram() + xlab("p-value") + ylab("Frequency")
-     ggplotly(hist) %>%
-     layout(width = 800)#, legend = list(orientation = "h", x = 0.4, y = -0.2))
-      # x    <- pdf2 #[,1]
-      # 
-      # hist(x, col = "#75AADB", border = "white",
-      #      xlab = "p-values",
-      #      main = "Histogram of p-values")
+      hist <-  ggplot(data = pdf2, aes(x=pvalue)) + geom_histogram(color="darkblue", fill="steelblue") + xlab("p-value") + ylab("Frequency")
+      ggplotly(hist)
     })
-    # FDR
-    # Store p-values in a matrix
-    exp.sig<- (input$replicates)*input$error
+    
+    # FDR plot
+    exp.sig<- (simval)*input$error
     obs.sig <- sum(pdf2[,2]<input$error)
   
     # Compare this with the Benjamini-Hochberg method:
     pvals.adj <- p.adjust(pdf2[,2], method="BH")
     dataset <- cbind(pdf2,pvals.adj)
     FDR <- exp.sig / obs.sig
-    
-    # Either 0.05 or bonferroni cutoff for # of genes
     output$false <- renderPrint({exp.sig / obs.sig})
-    
     output$fdrplot<-renderPlotly({
-    fdrgg <- ggplot(dataset,aes(x=pvalue,y=pvals.adj,color=as.factor(SampleSize)))+ geom_point(size=2)+labs(x = "p-values",y="Benjamini-Hochberg Adjusted p-values")+ geom_vline(xintercept = input$error,color="red") + labs(color = "")
-    ggplotly(fdrgg) %>%
-    layout(width = 800)#,legend = list(orientation = "h", x = 0.4, y = -0.2))
+    fdrgg <- ggplot(dataset,aes(x=pvalue,y=pvals.adj,color=as.factor(SampleSize)))+ geom_point(size=2)+labs(x = "p-values",y="Benjamini-Hochberg Adjusted p-values")+ geom_vline(xintercept = input$error,color="red") + labs(color = "")# + theme(plot.margin = margin(2,.8,2,.8, "cm"))
+    ggplotly(fdrgg)
     })
     
-    output$plot<-renderPlotly({
-    gg <- ggplot(melted,aes(x=SampleSize,y=value, group=variable, colour = variable))+ geom_point(size=3)+geom_line(size=2)+labs(x = "Sample Size",y="Power %",colour="Omics Variable")
-    gg2 <- gg + scale_colour_discrete(name="Omics Variable",labels=dput(names(pcaldf))) #+ scale_color_manual(values=c("forestgreen", "steelblue3"),labels=c("SNPs","Gene Expression"))
-    ggplotly(gg2)
-    
+    # Dispersion plot
+    if("RNA-seq" %in% input$omics && ((19 %in% input$select) || (20 %in% input$select))){
+    colnames(estdisp)[1] <- "EstDispersion"
+    output$disphist <- renderPlotly({
+      hist1 <-  ggplot(data = estdisp, aes(x=EstDispersion)) + geom_histogram(color="forestgreen", fill="chartreuse3") + xlab("Estimated-Dispersion") + ylab("Frequency")
+      ggplotly(hist1)
     })
+    }
     
     output$powersummary <- renderPrint({pcaldf})
-    sumup
+    output$summary <- renderPrint({sumup})
+    
+    # Power plot - refresh and add line to plot
+      if(input$addline==FALSE){
+        graph1 <<- as.data.frame(matrix(NA, ncol = 0, nrow = 0)) 
+      }
+      var1 <- rep(input$label,10)
+      graph <- melted
+      graph <- cbind(graph,var1)
+      graph1 <<- rbind(graph1,graph)
+      
+      if(input$addline==TRUE){
+        output$plot<-renderPlotly({
+          
+          gg <- ggplot(graph1,aes(x=SampleSize,y=value, group=var1, colour = var1))+ geom_point(size=3)+geom_line(size=2)+labs(x = "Sample Size",y="Power %",colour=input$label)
+          gg2 <- gg + scale_colour_discrete(name="",labels=input$label)
+          ggplotly(gg2)
+        })
+      }
+      else{
+        output$plot<-renderPlotly({
+          gg <- ggplot(graph,aes(x=SampleSize,y=value, group=var1, colour = var1))+ geom_point(size=3)+geom_line(size=2)+labs(x = "Sample Size",y="Power %",colour=input$label)
+          gg2 <- gg + scale_colour_discrete(name="",labels=input$label)
+          ggplotly(gg2)
+        })
+      }
+  })
     })
-   # variable selection check box group
+
+############################## End of progress bar and methods section ###############################
+  
+ 
+  # Methods in implementation development 
+  #"Generalised Linear Mixed Effects Model" = 4, 
+  #"Clustering + LR" = 14, "Clustering + Cox" = 15, "Sparse partial least square regression model" = 7,
+  #"Joint hierarchical Bayesian modelling (lme)" = 8, "GLM Path" = 9,
+  #"Partial least squares (Mixomics)" = 11, 
+  
+  # Variable selection check box group & method update
   observe({
-    x <- input$omics
+   x <- input$omics
    choices=c()
+   choices2=c()
+   
    if ('Genome' %in% x) 
     choices = c(choices,list("SNP-set" = 1))
-    if("RNA-seq" %in% x) 
+    if("RNA-seq" %in% x)
       choices =c(choices, list("Gene Expression" = 2))
     if("Epigenome" %in% x) 
       choices = c(choices,list("Methylation" = 3))
     if(input$tratio > 0) 
       choices = c(choices,c("Treatment" = 4))
     
-    updateCheckboxGroupInput(session, "checkGroup",
+   updateCheckboxGroupInput(session, "checkGroup",
                              label = paste("Parameters"),
-                             choices=choices,
-                          #   selected = choices
+                             choices=choices
                              )
-    
+   
+   # Mediation analysis selection choices
     if(input$select == 5 || input$select == 17){
       if (is.null(choices))
         choices <- character(0)
 
       updateSelectInput(session, "mediator",
                         label = "Select mediator variable",
-                        choices = choices,
-                     #   selected = tail(choices, 1)
+                        choices = choices
                      )
       updateSelectInput(session, "causalcov",
                         label = "Select dependent causal variable",
-                        choices = choices,
-                     #   selected = tail(choices, 2)
+                        choices = choices
       )
     }
   })
   
+  # List of methods shown in UI, dependent on outcome selected
+  observe({
+    x <- input$omics
+    choices2=c()
+    if("RNA-seq" %in% x) {
+      choices2 = c(choices2,list("Exact test" = 19, "Negative-Binomial GLM" = 20))
+    }
+    if(1 %in% input$outselect)
+    choices2 = c(choices2,list("Joint regression model (LR)" = 1,"MOFA + Logistic regression" = 2,"Mediation analysis + LR" = 5,"Similarity Network Fusion + LR" = 12,"Joint Non-negative Matrix Factorization (iCluster+)" = 6, "Multi Co-inertia analysis" = 18))
+    
+    if(3 %in% input$outselect)
+    choices2 = c(choices2,list("Joint regression model (Cox)"=16,"MOFA + Cox proportional hazards model" = 3,"Mediation analysis + Cox" = 17,"Cox Path L1 Penalty" = 10,"Similarity Network Fusion + Cox" = 13,"Joint Non-negative Matrix Factorization (iCluster+)" = 6, "Multi Co-inertia analysis" = 18))   
+    
+    if (is.null(choices2)){
+      choices2 <- character(0)
+    }
+    else{
+      updateSelectInput(session, "select", label = paste("Statistical integration/analysis models"),
+                        choices=choices2)
+    }
+    })
+  
+  # Bonferroni correction value for the number of features
+  output$BC <- renderPrint(
+    {
+      input$error2/input$genes2
+    }
+  )
+  
   # Notifications
    observeEvent(6 %in% input$select, {
     if(6 %in% input$select){
-     showNotification("NMF is very computationally demanding, therefore it may take longer to complete the calculation.",type = "warning")
+     showNotification("NMF is very computationally demanding, therefore it may take longer to complete the calculation.",type = "warning",closeButton = TRUE)
      }
     })
    observeEvent(2 %in% input$select || 3 %in% input$select, {
      if(2 %in% input$select || 3 %in% input$select){
-     showNotification("MOFA is very computationally demanding, therefore it may take longer to complete the calculation.",type = "warning")
+     showNotification("MOFA is very computationally demanding, therefore it may take longer to complete the calculation.",type = "warning",closeButton = TRUE)
      }
     })
+   observeEvent("RNA-seq" %in% input$omics, {
+     if("RNA-seq" %in% input$omics){
+       showNotification("If performing single omics power calculation, simulate a single SNP, Gene or 
+                        CpG site to analyse across multiple replicates. If performing a single omics 
+                        power caculation of RNA-seq data, simulate multiple genes for Exact test and 
+                        Negative Binomial GLM to achieve power based on the number of significantly 
+                        associated differentially expressed genes. For other analyses input number 
+                        of simulations and a single gene.",type = "warning",duration = 40, closeButton = TRUE)
+     }
+   })
    
-   output$summary <- renderPrint({methods()})
-  output$meanmeth <- renderText({paste0("Cases mean methylation ", round(mean(rbeta(input$obs,input$casemeth,input$casemeth2)),3),"\nControls mean methylation ", round(mean(rbeta(input$obs,input$contmeth,input$contmeth2)),3))
+   
+   output$meanmeth <- renderText({paste0("Cases mean methylation ", round(mean(rbeta(input$obs,input$casemeth,input$casemeth2)),3),"\nControls mean methylation ", round(mean(rbeta(input$obs,input$contmeth,input$contmeth2)),3))
   })
- # output$powercalc <- renderText({ 
- #   paste0("In order to achieve ", input$target, "% power, you'll need to use a sample size of at least 50.")
- # })
-  output$dloadData <- downloadHandler(
+  
+  # Download data to file
+   output$dloadData <- downloadHandler(
     filename = function() {
       paste("data", ".txt", sep = "")
     },
     content = function(file) {
-      write.table(datainputs(), file, row.names = FALSE)
+      write.table(datainputs()$a, file, row.names = FALSE)
     }
   )
 })
