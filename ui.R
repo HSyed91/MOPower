@@ -95,7 +95,8 @@ shinyUI(fluidPage(
       conditionalPanel(
       condition = "input.omics[0] == 'Genome' || input.omics[1] == 'Genome' || input.omics[2] == 'Genome'",
       sliderInput("snps", "Variants", min = 1, max = 1000, value = 4),
-      numericInput("snpeffect", "Average SNP Effect Size", value = 0.4, min = 0, max = 40),
+      sliderInput("snpeffect", "SNP effect range", min = 0.00001, max = 10.0000, value = c(0.1,0.2)),
+      #numericInput("snpeffect", "Average SNP Effect Size", value = 0.4, min = 0, max = 40),
       sliderInput("mafint", "MAF range", min = 0.000001, max = 0.5, value = c(0.01,0.2))
       ),
    #  h4("Gene-level data simulation Parameters"),
@@ -103,9 +104,11 @@ shinyUI(fluidPage(
       condition = "input.omics[0] == 'RNA-seq' || input.omics[1] == 'RNA-seq' || input.omics[2] == 'RNA-seq'",
       numericInput("genes", "Genes", min = 1, max = 100000, value = 5),
       numericInput("reads", "Average baseline reads per gene", value = 100, min = 0, max = 500),
-      numericInput("fc", "Fold Change (log2)", value = 2, min = -100, max = 100),
-      numericInput("disp", "Dispersion", value = 0.5, min = 0, max = 100),
-      bsTooltip("disp", "Usual values for the square root dispersion (D) are between 0.1 and 1. The dispersion equation used in the NB distribution is 1/(D^2) ","right", options = list(container = "body"))
+      sliderInput("fc", "Fold Change (log2)", min = 0.1, max = 5.0, value = c(0.5,1.5)),
+      sliderInput("disp", "Dispersion", min = 0.01, max = 5.00, value = c(0.5,2.5)),
+     # numericInput("fc", "Fold Change (log2)", value = 2, min = -100, max = 100),
+     # numericInput("disp", "Dispersion", value = 0.5, min = 0, max = 100),
+      bsTooltip("disp", "Usual values for the square root dispersion (D) are between 0.1 and 1. The dispersion equation used in the NB distribution is 1/(D) ","right", options = list(container = "body"))
     ),
   #  h4("CpG site data simulation Parameters"),
     conditionalPanel(
@@ -155,8 +158,9 @@ shinyUI(fluidPage(
     ),
     column(2,
     downloadButton("dloadData", "Download Sample Data"),
-    
-    column(2, br(), br(), actionButton("submit","Power Calculation", style = "color: white; 
+    column(2,br(),
+#downloadButton("report", "Generate report"), br(), br(), 
+actionButton("submit","Power Calculation", style = "color: white; 
                        background-color: green; height: 60px; width: 150px; text-align:center; text-indent: -2px; border-radius: 6px"))
     ),
        mainPanel(tags$style(type="text/css",
@@ -165,10 +169,10 @@ shinyUI(fluidPage(
        ),
          tabsetPanel(
            tabPanel("Data Replicate", tableOutput('table')), 
-           tabPanel("Replicate Analysis Summary", verbatimTextOutput("summary")),
+         # tabPanel("Replicate Analysis Summary", verbatimTextOutput("summary")),
            tabPanel("Power Summary", verbatimTextOutput("powersummary")), 
            tabPanel("Plots", fluidRow(br(),
-                    column(3,textInput("label", "Variable label", "Dispersion 0.5")),
+                    column(3,textInput("label", "Variable label", "")),
                     checkboxInput("addline", "Add line", FALSE),
                     column(12,plotlyOutput("plot")))
                     )
@@ -203,14 +207,14 @@ shinyUI(fluidPage(
                  
                  ),
     #  tabPanel("Cost Analysis", "Cost Analysis based on simulated study design."),
-      tabPanel("Instructions", fluidRow(
-        column(10,wellPanel(h3("Example"),h4("We are designing a time-to-event study where we follow-up 20 patients for 100 days after recruitment. 
-                                            We want to test the power to detect an association with a specific gene that countains 15 SNPs and 
-                                            10 CpG sites with a 0.071 difference in mean methylation between patients who experience the event and those that are censored. We have gene expression data collected for each patient. Using MOPower we 
-                                            can calculate power under different scenarios, changing the MAF interval for the SNPs, 
-                                            adding unmethylated CpG sites and testing multiple integration methods, however for the purpose of this example we will just show 
-                                            one power calculation using the Cox Path model with L1 Penalty.")),
-               mainPanel(img(src="1.png",height = 800),img(src="4.png", height = 400),img(src="5.png", height = 800))))),
+      #tabPanel("Instructions", fluidRow(
+        #column(10,wellPanel(h3("Example"),h4("We are designing a time-to-event study where we follow-up 20 patients for 100 days after recruitment. 
+                   #                         We want to test the power to detect an association with a specific gene that countains 15 SNPs and 
+                  #                          10 CpG sites with a 0.071 difference in mean methylation between patients who experience the event and those that are censored. We have gene expression data collected for each patient. Using MOPower we 
+                 #                           can calculate power under different scenarios, changing the MAF interval for the SNPs, 
+                #                            adding unmethylated CpG sites and testing multiple integration methods, however for the purpose of this example we will just show 
+               #                             one power calculation using the Cox Path model with L1 Penalty.")),
+              # mainPanel(img(src="1.png",height = 800),img(src="4.png", height = 400),img(src="5.png", height = 800))))),
       tabPanel("About", 
                fluidRow(
                  column(8,wellPanel(h3("MOPower v1.02, GNU General Public Licence"),"MOPower is a multi-omics power calculator, implemented with the latest integration and analysis models. Data is simulated using statistical distributions and user input parameters. Power is calculated based on the number of replicates
@@ -219,6 +223,8 @@ shinyUI(fluidPage(
                  ))),
       tabPanel("News", fluidRow(
         column(8,wellPanel(h3("Updates, new features & bug fixes")),
+               h5("06/08/2019 v1.02"),"1. Parameters such as effect sizes have been changed from single value for all simulated features to range values for a more realistic setting.",br(),br(),
+               "2. Multiprocessing using 5 CPU cores has been added for concurrent power calculation.", br(),br(),
                h5("10/04/2019 v1.02"),"1. Single omics power calculation of RNA-Seq data can now be calculated using edgeR's Exact test or Negative Binomial GLM. The output is now the power to detect differentially expressed genes between groups given a sample of genes (Q: How many genes will be differentially expressed?) Number of simulations input will disappear as this is not required.",br(),br(),
                "2. Plot of estimated dispersion parameter is displayed for single omics RNA-Seq power calculation.", br(),br(), 
                "3. An 'Add line' checkbox to add a new power calculation line to the power plot has been added.",br(),br(),
@@ -262,3 +268,6 @@ shinyUI(fluidPage(
      )
    )
   )
+
+
+
