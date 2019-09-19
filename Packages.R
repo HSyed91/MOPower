@@ -26,4 +26,5 @@ BiocManager::install("CancerSubtypes", version = "3.8")
 BiocManager::install("omicade4", version = "3.8")
 devtools::install_github("bioFAM/MOFA")
 BiocManager::install("iClusterPlus", version = "3.8")
-
+install.packages("foreach")
+install.packages("doParallel")
